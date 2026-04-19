@@ -3,7 +3,6 @@ import pandas as pd
 
 from pathlib import Path
 from loguru import logger
-from tqdm import tqdm
 
 from bookwiseai.config import RAW_DATA_DIR
 
