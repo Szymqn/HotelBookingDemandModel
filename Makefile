@@ -2,7 +2,7 @@
 # GLOBALS                                                                       #
 #################################################################################
 
-PROJECT_NAME = HotelBookindDemandModel
+PROJECT_NAME = HotelBookingDemandModel
 PYTHON_VERSION = 3.13
 PYTHON_INTERPRETER = python
 
