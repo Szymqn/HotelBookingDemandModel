@@ -1,12 +1,12 @@
 import typer
+import joblib
 import pandas as pd
 import numpy as np
 
 from pathlib import Path
 from loguru import logger
-from tqdm import tqdm
 
-from sklearn.preprocessing import LabelEncoder, OrdinalEncoder
+from sklearn.preprocessing import OrdinalEncoder
 from sklearn.model_selection import train_test_split
 
 from bookwiseai.config import RAW_DATA_DIR, PROCESSED_DATA_DIR, INTERIM_DATA_DIR
@@ -21,7 +21,7 @@ MONTH_MAP = {
 
 CAT_COLS = [
     "hotel", "meal", "market_segment", "distribution_channel",
-    "reserved_room_type", "deposit_type", "customer_type",
+    "assigned_room_type", "deposit_type", "customer_type",
 ]
 
 _EUROPE_ISO = {
@@ -39,101 +39,122 @@ SEASON_MAP = {
     9:  "autumn", 10: "autumn", 11: "autumn",
 }
 
-def engineer_features(data: pd.DataFrame) -> pd.DataFrame:
-    df = data.copy()
+SEASON_ORDER = ["winter", "spring", "summer", "autumn"]
 
-    # Drop Leaky Columns
-    df = df.drop(columns=['reservation_status', 'reservation_status_date'])
+LEAD_TIME_BUCKET_ORDER = ["last_minute", "short", "medium", "long", "very_long", "extreme"]
 
-    # Impute Missing Values
-    df["arrival_month_num"] = df["arrival_date_month"].map(MONTH_MAP)
-    df["children"]          = df["children"].fillna(0)
-    df["meal"]              = df["meal"].replace("Undefined", "SC")
-    df["country"]           = df["country"].fillna("N/A")
+FINAL_FEATURES = [
+    # Numeric
+    "lead_time", "arrival_date_year", "arrival_month_number",
+    "arrival_date_week_number", "stays_in_weekend_nights", "stays_in_week_nights",
+    "adults", "children", "is_repeated_guest", "previous_cancellations",
+    "previous_bookings_not_canceled", "booking_changes", "days_in_waiting_list",
+    "adr_clipped", "required_car_parking_spaces", "total_of_special_requests",
+    "total_nights", "total_guests", "is_weekend_arrival",
+    "has_previous_cancellations", "is_loyal_guest", "long_lead_time",
+    "has_agent", "has_company", "month_sin", "month_cos",
+    # Encoded categorical
+    "hotel", "meal", "market_segment", "distribution_channel",
+    "reserved_room_type", "deposit_type", "customer_type",
+    "assigned_room_type", "season", "lead_time_bucket", "country_region",
+]
 
-    # Binary indicators for presence of agent/company (instead of IDs)
-    df["has_agent"]   = df["agent"].notna().astype(int)
-    df["has_company"] = df["company"].notna().astype(int)
+class HotelFeaturesEngineer:
+    def __init__(self):
+        self.top_rooms = []
 
-    df = df.drop(columns=["agent", "company"])
+        self.room_encoder = None
 
-    # eliminate negative ADR and cap at 1000 (outliers)
-    df["adr_clipped"] = df["adr"].clip(lower=0, upper=1000)
+        self.ordinal_encoder = OrdinalEncoder(
+            handle_unknown='use_encoded_value',
+            unknown_value=-1
+        )
 
-    def _region_score(c: str) -> str:
-        match c:
-            case "PRT": return 1
-            case _  if c in _EUROPE_ISO: return 2
-            case _: return 3
+        self.ordered_encoder = OrdinalEncoder(
+            categories=[SEASON_ORDER, LEAD_TIME_BUCKET_ORDER],
+            handle_unknown="use_encoded_value",
+            unknown_value=-1
+        )
 
-    df["country_region"] = df["country"].astype(str).map(_region_score)
-    df = df.drop(columns=["country"])
+    @staticmethod
+    def _apply_safe_features(df: pd.DataFrame) -> pd.DataFrame:
+        df = df.copy()
 
-    top_rooms = df["reserved_room_type"].value_counts().head(5).index.tolist()
-    for col in ["reserved_room_type"]:
-        df[col] = df[col].apply(lambda v: v if v in top_rooms else "Other")
+        df["arrival_month_number"] = df["arrival_date_month"].map(MONTH_MAP)
+        df["children"] = df["children"].fillna(0)
+        df["meal"] = df["meal"].replace("Undefined", "SC")
+        df["country"] = df["country"].fillna("N/A")
 
-    df["total_nights"]               = df["stays_in_weekend_nights"] + df["stays_in_week_nights"]
-    df["total_guests"]               = df["adults"] + df["children"] + df["babies"]
-    df["season"]                     = df["arrival_month_num"].map(SEASON_MAP)
-    df["is_weekend_arrival"]         = (df["stays_in_weekend_nights"] > 0).astype(int)
-    df["has_previous_cancellations"] = (df["previous_cancellations"] > 0).astype(int)
-    df["is_loyal_guest"]             = (df["previous_bookings_not_canceled"] > 0).astype(int)
-    df["long_lead_time"]             = (df["lead_time"] > 90).astype(int)
-    df["lead_time_bucket"]           = pd.cut(
-        df["lead_time"],
-        bins=[-1, 7, 30, 90, 180, 365, 9999],
-        labels=["last_minute", "short", "medium", "long", "very_long", "extreme"],
-    ).astype(str)
+        df["has_agent"] = df["agent"].notna().astype(int)
+        df["has_company"] = df["company"].notna().astype(int)
 
-    # cyclic encoding of months (for Logistic Regression)
-    df["month_sin"] = np.sin(2 * np.pi * df["arrival_month_num"] / 12).astype("float32")
-    df["month_cos"] = np.cos(2 * np.pi * df["arrival_month_num"] / 12).astype("float32")
+        df["adr_clipped"] = df["adr"].clip(lower=0, upper=1000)
 
-    # Label Encoding for categorical features (for tree-based models)
-    le = LabelEncoder()
-    encode_cols = CAT_COLS + ["season", "lead_time_bucket", "country_region"]
-    for col in encode_cols:
-        if col in df.columns:
-            df[col + "_enc"] = le.fit_transform(df[col].astype(str))
+        def _region_score(c: str) -> int:
+            if c == "PRT": return 1
+            if c in _EUROPE_ISO: return 2
+            return 3
 
-    # Ordinal Encoding for reserved_room_type (for Logistic Regression)
-    if "reserved_room_type" in df.columns:
-        oe = OrdinalEncoder(categories=[top_rooms + ["Other"]])
-        df["reserved_room_type_enc"] = oe.fit_transform(df[["reserved_room_type"]])
+        df["country_region"] = df["country"].astype(str).apply(_region_score)
 
-    return df
+        df["total_nights"] = df["stays_in_weekend_nights"] + df["stays_in_week_nights"]
+        df["total_guests"] = df["adults"] + df["children"] + df["babies"]
+        df["season"] = df["arrival_month_number"].map(SEASON_MAP)
+        df["is_weekend_arrival"] = (df["stays_in_weekend_nights"] > 0).astype(int)
+        df["has_previous_cancellations"] = (df["previous_cancellations"] > 0).astype(int)
+        df["is_loyal_guest"] = (df["previous_bookings_not_canceled"] > 0).astype(int)
+        df["long_lead_time"] = (df["lead_time"] > 90).astype(int)
+        df["lead_time_bucket"] = pd.cut(
+            df["lead_time"],
+            bins=[-1, 7, 30, 90, 180, 365, 9999],
+            labels=LEAD_TIME_BUCKET_ORDER,
+        ).astype(str)
 
-def build_feature_matrix(data: pd.DataFrame):
-    df = data.copy()
+        df["month_sin"] = np.sin(2 * np.pi * df["arrival_month_number"] / 12).astype("float32")
+        df["month_cos"] = np.cos(2 * np.pi * df["arrival_month_number"] / 12).astype("float32")
 
-    numeric_features = [
-        "is_canceled", "lead_time", "arrival_date_year", "arrival_month_num",
-        "arrival_date_week_number", "stays_in_weekend_nights", "stays_in_week_nights",
-        "adults", "children", "is_repeated_guest", "previous_cancellations",
-        "previous_bookings_not_canceled", "booking_changes", "days_in_waiting_list",
-        "adr_clipped", "required_car_parking_spaces", "total_of_special_requests",
-        "total_nights", "total_guests", "is_weekend_arrival",
-        "has_previous_cancellations", "is_loyal_guest", "long_lead_time",
-        "has_agent", "has_company",
-        "month_sin", "month_cos",
-    ]
+        return df
 
-    encoded_features = [
-        "hotel_enc", "meal_enc", "market_segment_enc", "distribution_channel_enc",
-        "reserved_room_type_enc", "deposit_type_enc", "customer_type_enc",
-        "season_enc", "lead_time_bucket_enc", "country_region_enc",
-    ]
+    def fit_transform(self, X_train: pd.DataFrame) -> pd.DataFrame:
+        X = self._apply_safe_features(df=X_train)
 
-    for enc_col in encoded_features:
-        original_col = enc_col.replace("_enc", "")
-        df[original_col] = df[enc_col]  # overwrite original with encoded values
-        df = df.drop(columns=[enc_col])  # drop the _enc column
+        self.top_rooms = X["reserved_room_type"].value_counts().head(5).index.tolist()
 
-    renamed_encoded = [col.replace("_enc", "") for col in encoded_features]
+        X["reserved_room_type"] = X["reserved_room_type"].apply(
+            lambda v: v if v in self.top_rooms else "Other"
+        )
 
-    all_features = numeric_features + renamed_encoded
-    return df[all_features]
+        self.room_encoder = OrdinalEncoder(
+            categories=[self.top_rooms + ["Other"]],
+            handle_unknown="use_encoded_value",
+            unknown_value=-1
+        )
+        X["reserved_room_type"] = self.room_encoder.fit_transform(X[["reserved_room_type"]])
+
+        X[CAT_COLS] = self.ordinal_encoder.fit_transform(X[CAT_COLS].astype(str))
+
+        self.ordered_encoder.fit(X[["season", "lead_time_bucket"]])
+        X[["season", "lead_time_bucket"]] = self.ordered_encoder.transform(
+            X[["season", "lead_time_bucket"]]
+        )
+
+        return X[FINAL_FEATURES]
+
+    def transform(self, X_eval: pd.DataFrame) -> pd.DataFrame:
+        X = self._apply_safe_features(df=X_eval)
+
+        X["reserved_room_type"] = X["reserved_room_type"].apply(
+            lambda v: v if v in self.top_rooms else "Other"
+        )
+        X["reserved_room_type"] = self.room_encoder.transform(X[["reserved_room_type"]])
+
+        X[CAT_COLS] = self.ordinal_encoder.transform(X[CAT_COLS].astype(str))
+
+        X[["season", "lead_time_bucket"]] = self.ordered_encoder.transform(
+            X[["season", "lead_time_bucket"]]
+        )
+
+        return X[FINAL_FEATURES]
 
 @app.command()
 def main(
@@ -147,15 +168,9 @@ def main(
 
     df = pd.read_csv(filepath_or_buffer=input_path)
 
-    df_ef = engineer_features(df)
-    df_clean = build_feature_matrix(df_ef)
-    logger.info(f"Feature matrix shape: {df_clean.shape}")
-    df_clean.to_csv(interim_path, index=False)
-    logger.info("Feature engineering complete")
-
     TARGET = "is_canceled"
-    X = df_clean.drop(columns=[TARGET])
-    y = df_clean[TARGET]
+    X = df.drop(columns=[TARGET])
+    y = df[TARGET]
 
     X_train, X_temp, y_train, y_temp = train_test_split(
         X, y,
@@ -170,17 +185,25 @@ def main(
         stratify=y_temp,
     )
 
-    train = pd.concat([X_train, y_train], axis=1)
-    valid = pd.concat([X_val, y_val], axis=1)
-    test = pd.concat([X_test, y_test], axis=1)
+    engineer = HotelFeaturesEngineer()
+
+    X_train = engineer.fit_transform(X_train)
+    X_val = engineer.transform(X_val)
+    X_test = engineer.transform(X_test)
+
+    X_train.to_csv(interim_path, index=False)
+    logger.info(f"Interim saved (train only, without target) to {interim_path}")
+
+    joblib.dump(engineer, PROCESSED_DATA_DIR / "engineer.pkl")
+    logger.info(f"Engineer saved to {PROCESSED_DATA_DIR}/engineer.pkl")
+
+    train = pd.concat([X_train.reset_index(drop=True), y_train.reset_index(drop=True)], axis=1)
+    valid = pd.concat([X_val.reset_index(drop=True), y_val.reset_index(drop=True)], axis=1)
+    test = pd.concat([X_test.reset_index(drop=True), y_test.reset_index(drop=True)], axis=1)
 
     train.to_csv(train_path, index=False)
     valid.to_csv(valid_path, index=False)
     test.to_csv(test_path, index=False)
-
-    logger.info(f"Train : {train.shape}")
-    logger.info(f"Val   : {valid.shape}")
-    logger.info(f"Test  : {test.shape}")
 
     logger.info(f"Train : {train.shape} | cancellation rate: {y_train.mean():.2%}")
     logger.info(f"Val   : {valid.shape} | cancellation rate: {y_val.mean():.2%}")
