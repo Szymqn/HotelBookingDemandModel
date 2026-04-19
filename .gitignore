@@ -1,5 +1,7 @@
-# Data
-/data/
+# Data: ignore all contents, keep folder placeholders/data/*
+/data/**
+!/data/**/
+!/data/**/.gitkeep
 
 # Mac OS-specific storage files
 .DS_Store
