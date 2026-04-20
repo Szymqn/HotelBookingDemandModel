@@ -106,8 +106,6 @@ def load_r_selected(path: Path, method: str, X: pd.DataFrame) -> set:
 @app.command()
 def main(
     train_path: Path = PROCESSED_DATA_DIR / "train.csv",
-    val_path: Path = PROCESSED_DATA_DIR / "valid.csv",
-    test_path: Path = PROCESSED_DATA_DIR / "test.csv",
     boruta_path: Path = EXTERNAL_DATA_DIR / "boruta_selected.csv",
     mdfs_path:   Path = EXTERNAL_DATA_DIR / "mdfs_selected.csv",
     min_votes: int = 3,
@@ -147,12 +145,6 @@ def main(
 
     final_features = [f for f, v in votes.items() if v >= min_votes]
     logger.info(f"\nFinal: {len(final_features)}/{len(X_train.columns)} features kept (≥{min_votes} votes)")
-
-    for path, name in [(train_path, "train_vote_fs"), (val_path, "valid_vote_fs"), (test_path, "test_vote_fs")]:
-        df = pd.read_csv(path)
-        df = df[final_features + [TARGET]]
-        df.to_csv(path, index=False)
-        logger.info(f"{name} saved: {df.shape}")
 
     joblib.dump(final_features, PROCESSED_DATA_DIR / "features_voted.pkl")
     logger.info("Selected features saved to processed/features_voted.pkl")
