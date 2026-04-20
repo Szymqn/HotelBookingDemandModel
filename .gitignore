@@ -3,6 +3,9 @@
 !/data/**/
 !/data/**/.gitkeep
 
+# Models: ignore all contents, keep folder placeholders/models/*
+/models/**
+!/models/**/
 !/models/**/.gitkeep
 
 # Mac OS-specific storage files
