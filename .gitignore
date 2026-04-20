@@ -3,6 +3,8 @@
 !/data/**/
 !/data/**/.gitkeep
 
+!/models/**/.gitkeep
+
 # Mac OS-specific storage files
 .DS_Store
 
