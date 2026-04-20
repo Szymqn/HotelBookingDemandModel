@@ -154,8 +154,8 @@ def main(
         df.to_csv(path, index=False)
         logger.info(f"{name} saved: {df.shape}")
 
-    joblib.dump(final_features, PROCESSED_DATA_DIR / "selected_features.pkl")
-    logger.info("Selected features saved to processed/selected_features.pkl")
+    joblib.dump(final_features, PROCESSED_DATA_DIR / "features_voted.pkl")
+    logger.info("Selected features saved to processed/features_voted.pkl")
 
     logger.success("Feature selection complete.")
 
