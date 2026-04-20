@@ -68,10 +68,15 @@ create_environment:
 data: requirements
 	$(PYTHON_INTERPRETER) bookwiseai/dataset.py
 
-# Make features
+# Make features engineering
 .PHONY: features
 features: data
 	$(PYTHON_INTERPRETER) bookwiseai/features.py
+
+# Make feature selection
+.PHONY: feature_selection
+feature_selection: features
+	$(PYTHON_INTERPRETER) bookwiseai/feature_selection.py
 
 #################################################################################
 # Self Documenting Commands                                                     #
