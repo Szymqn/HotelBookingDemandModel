@@ -121,10 +121,10 @@ def main(
 
     results = {
         "lasso": run_lasso(X_train, y_train),
-        "rfe_lr": run_rfe_lr(X_train, y_train),
-        "rfe_dt": run_rfe_dt(X_train, y_train),
-        "rfe_rf": run_rfe_rf(X_train, y_train),
-        "rfe_xgb": run_rfe_xgb(X_train, y_train),
+        "rfelr": run_rfe_lr(X_train, y_train),
+        "rfedt": run_rfe_dt(X_train, y_train),
+        "rferf": run_rfe_rf(X_train, y_train),
+        "rfexgb": run_rfe_xgb(X_train, y_train),
         "boruta": load_r_selected(boruta_path, "boruta", X_train),
         "mdfs":   load_r_selected(mdfs_path, "mdfs", X_train),
     }
