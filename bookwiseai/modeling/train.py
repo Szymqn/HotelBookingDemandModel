@@ -82,7 +82,8 @@ def main(
     train_path:     Path = PROCESSED_DATA_DIR / "train.csv",
     val_path:       Path = PROCESSED_DATA_DIR / "valid.csv",
     processed_path: Path = PROCESSED_DATA_DIR,
-    model_path:     Path = MODELS_DIR,
+    model_path:     Path = MODELS_DIR / "trained_models",
+    model_summaries_path: Path = MODELS_DIR / "summaries",
     features_path_list: list[Path] | None = None,
     n_splits:      int  = 5,
 ) -> None:
@@ -184,7 +185,7 @@ def main(
         val_df = pd.DataFrame(val_records)
         results_df = cv_df.merge(val_df, on="model")
 
-        results_out = model_path / f"{feature_set_name}_cv_results.csv"
+        results_out = model_summaries_path / f"{feature_set_name}_cv_results.csv"
         results_df.to_csv(results_out, index=False)
         logger.info(f"CV + Val results saved to {results_out}")
 

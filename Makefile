@@ -99,6 +99,16 @@ train: feature_selection
 train_only: requirements
 	$(PYTHON_INTERPRETER) bookwiseai/modeling/train.py
 
+## Make prediction
+.PHONY: predict
+predict: train
+	$(PYTHON_INTERPRETER) bookwiseai/modeling/predict.py
+
+## Make prediction only
+.PHONY: predict_only
+predict_only: requirements
+	$(PYTHON_INTERPRETER) bookwiseai/modeling/predict.py
+
 #################################################################################
 # Self Documenting Commands                                                     #
 #################################################################################
