@@ -62,6 +62,9 @@ create_environment:
 # PROJECT RULES                                                                 #
 #################################################################################
 
+#################################################################################
+# MODELING PIPELINE RULES													 	#
+#################################################################################
 
 ## Make dataset
 .PHONY: data
@@ -108,6 +111,36 @@ predict: train
 .PHONY: predict_only
 predict_only: requirements
 	$(PYTHON_INTERPRETER) bookwiseai/modeling/predict.py
+
+#################################################################################
+# EXPLANATION PIPELINE RULES (After modeling)												#
+#################################################################################
+
+# Instance level
+
+## Make break down explanation
+.PHONY: break_down
+break_down: requirements
+	$(PYTHON_INTERPRETER) bookwiseai/explanation/instance_level/break_down.py
+
+## Make Shapley explanation
+.PHONY: shap
+shap: requirements
+	$(PYTHON_INTERPRETER) bookwiseai/explanation/instance_level/shap.py
+
+## Make LIME explanation
+.PHONY: lime
+lime: requirements
+	$(PYTHON_INTERPRETER) bookwiseai/explanation/instance_level/LIME.py
+
+## Make Ceteris-paribus Profiles explanation
+.PHONY: cp
+cp: requirements
+	$(PYTHON_INTERPRETER) bookwiseai/explanation/instance_level/cp.py
+
+# Dataset Level
+
+
 
 #################################################################################
 # Self Documenting Commands                                                     #
