@@ -140,7 +140,25 @@ cp: requirements
 
 # Dataset Level
 
+## Make variable importance measure explanation
+.PHONY: vim
+vim: requirements
+	$(PYTHON_INTERPRETER) bookwiseai/explanation/dataset_level/vim.py
 
+## Make partial dependence plot explanation
+.PHONY: pdp
+pdp: requirements
+	$(PYTHON_INTERPRETER) bookwiseai/explanation/dataset_level/pdp.py
+
+## Make local dependence and accumulated local explanation
+.PHONY: ld_and_al
+ld_and_al: requirements
+	$(PYTHON_INTERPRETER) bookwiseai/explanation/dataset_level/ld_and_al.py
+
+## Make residual diagnostics explanation
+.PHONY: rd
+rd: requirements
+	$(PYTHON_INTERPRETER) bookwiseai/explanation/dataset_level/rd.py
 
 #################################################################################
 # Self Documenting Commands                                                     #
