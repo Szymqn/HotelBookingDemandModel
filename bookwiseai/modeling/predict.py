@@ -13,7 +13,7 @@ app = typer.Typer()
 @app.command()
 def main(
         processed_path: Path = PROCESSED_DATA_DIR,
-        valid_path: Path = PROCESSED_DATA_DIR / "valid.csv",
+        test_path: Path = PROCESSED_DATA_DIR / "test.csv",
         models_path: Path = MODELS_DIR / "trained_models",
         predictions_path: Path = MODELS_DIR / "predictions",
         models_path_list: list[Path] | None = None,
@@ -47,7 +47,7 @@ def main(
     assert features_path_list is not None and len(features_path_list) > 0,\
         "Please provide at least one features file in features_path_list"
 
-    valid = pd.read_csv(valid_path).drop(columns=["is_canceled"])
+    test = pd.read_csv(test_path).drop(columns=["is_canceled"])
 
     logger.info("Performing inference for model...")
 
@@ -60,7 +60,7 @@ def main(
         final_features_path = processed_path / features_path
         selected_features = joblib.load(final_features_path)
 
-        predictions = model.predict(valid[selected_features])
+        predictions = model.predict(test[selected_features])
 
         predictions_df = pd.DataFrame({
             "pred": predictions,
