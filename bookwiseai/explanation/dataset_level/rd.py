@@ -38,8 +38,6 @@ def main(
     fig.write_image(OUT_path)
     logger.info(f"Saved Residual-diagnostics plot to: {OUT_path}")
 
-    rd.plot(variable='lead_time', yvariable='is_canceled', show=True)
-
     logger.success("Dataset-level explanation of Residual-diagnostics method complete.")
 
 
